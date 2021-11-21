@@ -1,5 +1,7 @@
 # cs418-fa21-project
 
+https://megavako.github.io/uiuc-cs418-yans3/
+
 Photorealistic Rendering Machine Project
 In order to show off your knowledge and skill in computer graphics, you'll write your own WebGL webpage that includes a photorealistic rendering of any scene you like. For inspiration, here is a rendering of a teapot decorated with the University of Illinois logo, reflecting Memorial Stadium.
 
