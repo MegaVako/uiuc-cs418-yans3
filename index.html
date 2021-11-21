@@ -21,6 +21,7 @@ var vert_normal_attr;
 //
 // a default vertex shader implemented as a backquoted string variable
 //
+//#define M_PI 3.1415926535897932384626433832795
 
 var vs = `#version 300 es
 
@@ -32,14 +33,30 @@ uniform mat4 uModelViewMatrix;
 uniform mat3 uNormalMatrix;
 uniform mat4 uProjectionMatrix;
 
-out vec2 vTexCoord;
+out vec2 vTexCoord, vSphereCoord;
 out vec3 vNormal;
 
-void main() {
-  vTexCoord.s = aVertexPosition.x + 0.5;
-  vTexCoord.t = aVertexPosition.y + 0.5;
+out vec3 l,v;
 
-  gl_Position = uProjectionMatrix*uModelViewMatrix*vec4(aVertexPosition, 1.0);
+void main() {
+  // surface mapping 10 pt -- cylindical mapping
+  //vTexCoord.s = max(min(2.0 * 3.14159265, atan(aVertexPosition.z, -aVertexPosition.x)), -2.0 * 3.14159265) / (2.0 * 3.14159265);
+  vTexCoord.s = ((atan(aVertexPosition.z, -aVertexPosition.x) / (2.0 * 3.14159265)) * 2.0 + 0.5);
+  vTexCoord.t = (aVertexPosition.y * 2.0 + 0.5);
+
+  // phong lighting 
+  vNormal = normalize(uNormalMatrix * aVertexNormal);
+  l = normalize(uModelViewMatrix * vec4(1.0, 1.0, 1.0, -1.0)).xyz;
+  //l = normalize(uNormalMatrix * vec3(1.0, 1.0, 1.0));
+  vec4 p = uModelViewMatrix * vec4(aVertexPosition, 1.0);
+  v = normalize(-p.xyz);
+
+  // reflective surface 10 pt -- sphere map
+  vec3 n = normalize(uNormalMatrix * aVertexNormal);
+  vSphereCoord.s = (n.x + 1.0) / 2.0;
+  vSphereCoord.t = (n.y + 1.0) / 2.0;
+
+  gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aVertexPosition, 1.0);
 }
 `;
 
@@ -52,16 +69,29 @@ var fs = `#version 300 es
 precision mediump float;
     
 in vec3 vNormal;
-in vec2 vTexCoord;
+in vec2 vTexCoord, vSphereCoord;
+in vec3 n,l,v;
+
 uniform sampler2D uSampler;
 uniform sampler2D uSampler2;
+uniform sampler2D uSampler3;
 
 out vec4 outColor;
     
 void main() {
   vec3 illinois = vec3(texture(uSampler, vTexCoord));
-  vec3 stadium = vec3(texture(uSampler2, vTexCoord));
-  vec3 c = 0.5*illinois + 0.5*stadium;
+  vec3 stadium = vec3(texture(uSampler2, vSphereCoord));
+
+  //vec3 c = (0.5*illinois + 0.5*stadium);
+
+  vec3 nhat = normalize(vNormal);
+  vec3 r = 2.0 * (dot(nhat, l)) * nhat - l;
+  vec3 c = (0.5*illinois + 0.5*stadium) * dot(nhat, l);
+   /*
+  if (dot(v, r) > 0.0) {
+      c += 0.5 * vec3(1.0, 1.0, 1.0) * pow(max(0.0, dot(v, r)), 10.0);
+  }
+   */
 
   outColor = vec4(c,1.0);
 }
