@@ -11,9 +11,10 @@ var shaderProgram;
 var modelview_uniform;
 var normal_uniform;
 var projection_uniform;
-var texture, texture2;
+var texture, texture2, texture3;
 var sampler_uniform;
 var sampler2_uniform;
+var sampler3_uniform;
 var teapot_vao;
 var vert_pos_attr;
 var vert_normal_attr;
@@ -33,30 +34,18 @@ uniform mat4 uModelViewMatrix;
 uniform mat3 uNormalMatrix;
 uniform mat4 uProjectionMatrix;
 
-out vec2 vTexCoord, vSphereCoord;
-out vec3 vNormal, vLightRay, vEyeVector;
+out vec2 vSphereCoord;
+out vec3 n, l, v;
 out vec3 aPreVertex;
 
 void main() {
-  // surface mapping 10 pt -- cylindical mapping
-  /*
-  vTexCoord.s = (atan(aVertexPosition.z, -aVertexPosition.x) / (2.0 * 3.1415926535897932384626433832795));
-  vTexCoord.t = (aVertexPosition.y * 2.0 + 0.5);
-  */
   aPreVertex = aVertexPosition;
 
-    // model --> world --> view 
-  vec4 vertex = vec4(aVertexPosition, 1.0);
-    // model
-  vec4 light = vec4(1.0, 0.5, 1.0, 1.0);
+  n = normalize(uNormalMatrix * aVertexNormal);
+  l = normalize(vec3(1.0, 1.0, 0.0));
+  vec4 p = uModelViewMatrix * vec4(aVertexPosition, 1.0);
+  v = normalize(-p.xyz);
 
-  // phong lighting prep
-  vNormal = (uNormalMatrix * aVertexNormal);
-  vLightRay = uNormalMatrix * (light.xyz - vertex.xyz);
-  vEyeVector = -aVertexNormal.xyz;
-
-  // reflective surface 10 pt -- sphere map
-  vec3 n = normalize(uNormalMatrix * aVertexNormal);
   vSphereCoord.s = (n.x + 1.0) / 2.0;
   vSphereCoord.t = (n.y + 1.0) / 2.0;
 
@@ -72,7 +61,7 @@ var fs = `#version 300 es
 
 precision mediump float;
     
-in vec3 vNormal, vLightRay, vEyeVector;
+in vec3 n, l, v;
 in vec2 vSphereCoord;
 in vec3 aPreVertex;
 
@@ -84,34 +73,50 @@ out vec4 outColor;
     
 void main() {
   
+  // surface mapping 10 pt -- cylindical mapping
   vec2 vTexCoord = vec2(0, 0);
   vTexCoord.s = (atan(aPreVertex.z, -aPreVertex.x) / (2.0 * 3.1415926535897932384626433832795));
   vTexCoord.t = (aPreVertex.y * 2.0 + 0.5);
 
+  vec2 vBumpCoord_ds = vec2(vTexCoord.st);
+  vec2 vBumpCoord_dt = vec2(vTexCoord.st);
+  float hs = 1.0 / 512.0;
+  float ht = 1.0 / 512.0;
+  vBumpCoord_ds.s += hs;
+  vBumpCoord_dt.t += ht; 
+
   vec3 illinois = vec3(texture(uSampler, vTexCoord));
+  // reflective surface 10 pt -- sphere map
   vec3 stadium = vec3(texture(uSampler2, vSphereCoord));
 
-  vec3 N = normalize(vNormal);
-  vec3 L = normalize(vLightRay);
-  float lambertTerm = dot(N, -L);
-  vec3 standar_c = (0.5*illinois + 0.5*stadium);
+  float bumpMap_self = (1.0 - texture(uSampler3, vTexCoord).g);
+  float bumpMap_ds = (1.0 - texture(uSampler3, vBumpCoord_ds).g);
+  float bumpMap_dt = (1.0 - texture(uSampler3, vBumpCoord_dt).g);
 
-  //ambient
-  vec4 Ia = vec4(0.0, 0.0, 0.0, 1.0);
-  //diffuse
-  vec4 Id = vec4(standar_c, 1.0);
-  //specular
-  vec4 Is = vec4(standar_c, 1.0);
+  float dBds = (bumpMap_ds - bumpMap_self) / hs;
+  float dBdt = (bumpMap_dt - bumpMap_self) / ht;
 
-  if (lambertTerm > 0.0) {
-    Id = Id * lambertTerm;
-    vec3 E = normalize(vEyeVector);
-    vec3 R = reflect(L, N);
-    float specular = pow(max(dot(R, E), 0.0), 10.0);
+  vec3 nhat = normalize(n);
+  vec3 ps = nhat * vec3(0.0, 1.0, 0.0);
+  vec3 pt = nhat * -ps;
 
-    Is = Is * specular;
+  vec3 nPrime = normalize(nhat - dBds * nhat * ps + dBdt * nhat * pt);
+
+  vec3 r = 2.0 * (dot(nPrime, l)) * nPrime - l;
+  //vec3 r = 2.0 * (dot(nhat, l)) * nhat - l;
+  vec3 c = vec3(0.0, 0.0, 0.0);
+
+  // diffuse -- 10 pt
+  //c += vec3(1.0, 0.33, 0.18) * dot(nhat, l);
+  c += vec3(1.0, 0.33, 0.18) * dot(nPrime, l);
+
+  // ambient -- 10 pt
+  c += (0.8 * stadium + 0.2 * illinois);
+  if (dot(v, r) > 0.0) {
+     // specular
+     c += vec3(1.0, 1.0, 1.0) * pow(max(0.0 , dot(v, r)), 10.0);
   }
-  outColor = vec4(vec3(0.5 * Is), 1.0);
+  outColor = vec4(c, 1.0);
 }
 `;
 
@@ -236,6 +241,28 @@ function initwebgl() {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, image2);
     gl.generateMipmap(gl.TEXTURE_2D);
   });
+ 
+  //
+  // set up third texture and sampler
+  //
+
+  texture3 = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture3);
+
+  var sampler3 = gl.createSampler();
+  gl.bindSampler(2, sampler3);
+
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]));
+
+  var image3 = new Image();
+  image3.src = "DisplacementMap_v3.png";
+
+  image3.addEventListener("load", function() {
+    gl.bindTexture(gl.TEXTURE_2D, texture3);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 512, 512, 0, gl.RGBA, gl.UNSIGNED_BYTE, image3);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  });
 
   //
   // set up transformation matrices
@@ -282,6 +309,7 @@ function loadshaders(vertexShaderSource,fragmentShaderSource) {
   projection_uniform = gl.getUniformLocation(shaderProgram, "uProjectionMatrix"); 
   sampler_uniform = gl.getUniformLocation(shaderProgram, "uSampler"); 
   sampler2_uniform = gl.getUniformLocation(shaderProgram, "uSampler2"); 
+  sampler3_uniform = gl.getUniformLocation(shaderProgram, "uSampler3");
 }
 
 //
@@ -310,11 +338,16 @@ function draw(time) {
 
   gl.uniform1i(sampler_uniform,0);
   gl.uniform1i(sampler2_uniform,1);
+  gl.uniform1i(sampler3_uniform,2);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
+
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, texture2);
+
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, texture3);
 
   gl.bindVertexArray(teapot_vao);
   gl.drawElements(gl.TRIANGLES,
