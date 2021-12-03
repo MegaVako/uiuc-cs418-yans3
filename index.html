@@ -71,6 +71,7 @@ uniform sampler2D uSampler3;
 
 out vec4 outColor;
 float pi_2 = (2.0 * 3.1415926535897932384626433832795);
+float pi_1 = 3.1415926535897932384626433832795;
 
 float modI(float a,float b) {
     float m=a-floor((a+0.5)/b)*b;
@@ -83,7 +84,6 @@ void main() {
   
   // surface mapping 10 pt -- cylindical mapping
   vec2 vTexCoord = vec2(0, 0);
-  //vTexCoord.s = (atan((aPreVertex.z + 1.0) / 2.0, -aPreVertex.x) / pi_2);
   vTexCoord.s = (atan(aPreVertex.z, -aPreVertex.x) / pi_2);
   vTexCoord.t = (aPreVertex.y * 2.0 + 0.5);
 
@@ -103,9 +103,23 @@ void main() {
   float t_512 = vTexCoord.t * 512.0;
   bool cond1 = (modI(s_512, 100.0) > 50.0); 
   bool cond2 = (modI(t_512, 100.0) > 50.0);
+  float s_1 = (aPreVertex.x + 0.5) * 1.5;
+  float t_1 = (aPreVertex.z + 0.5) * 1.5;
   if ((cond1 || cond2) && !(cond1 && cond2)) {
-      procedual += vec3(0.0, 0.0, 1.0);
+    //procedual += vec3(sin((s_1 + t_1) / 2.0) , sin(s_1), sin(t_1));
+    if (s_1 < 0.5) {
+        procedual += vec3((cos(s_1 * pi_1) + 1.0) / 2.0, (-cos(t_1 * pi_1) + 1.0) / 2.0, 0.0);
+    } else if (s_1 >= 0.5 && s_1 <= 1.0) {
+        procedual += vec3(0.0, (-cos(t_1 * pi_1) + 1.0) / 2.0, (cos(s_1 * pi_1) + 1.0) / 2.0);
+    } else {
+        procedual += vec3((-cos(t_1 * pi_1) + 1.0) / 2.0, 0.0, (cos(s_1 * pi_1) + 1.0) / 2.0);
+    }
   }
+  /*
+  if (aPreVertex.x < 0.5) {
+    procedual += vec3(1.0, 0.0, 0.0);
+  }
+  */
 
   float bumpMap_self = (texture(uSampler3, vTexCoord).r);
   float bumpMap_ds = (texture(uSampler3, vBumpCoord_ds).r);
