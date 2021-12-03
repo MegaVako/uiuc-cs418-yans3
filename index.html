@@ -134,7 +134,7 @@ void main() {
   vec3 nPrime = normalize(nhat - (dBds * pt) + (dBdt * ps));
   //nPrime = nhat;
 
-  vec3 base_color = (0.3 * stadium + 0.7 * illinois + procedual);
+  vec3 base_color = (0.5 * stadium + 0.4 * illinois + 0.5 * procedual);
   vec3 c = vec3(0.0, 0.0, 0.0);
 
   // diffuse -- 10 pt, white diffuse
@@ -294,8 +294,8 @@ function initwebgl() {
                 gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]));
 
   var image3 = new Image();
-  //image3.src = "DisplacementMap_v7.png";
-  image3.src = "DisplacementMap_parsed_v1.png";
+  image3.src = "DisplacementMap_v7.png";
+  //image3.src = "DisplacementMap_parsed_v1.png";
   //image3.src = "illinois512_parsed.png";
 
   image3.addEventListener("load", function() {
